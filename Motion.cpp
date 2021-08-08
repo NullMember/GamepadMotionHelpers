@@ -1,3 +1,6 @@
+// Copyright (c) 2021 Malik Enes Safak
+// See LICENSE.md for more information
+
 #include "GamepadMotion.hpp"
 #include "Motion.h"
 

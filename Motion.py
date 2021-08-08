@@ -1,3 +1,6 @@
+# Copyright (c) 2021 Malik Enes Safak
+# See LICENSE.md for more information
+
 import ctypes
 import ctypes.util
 import os
