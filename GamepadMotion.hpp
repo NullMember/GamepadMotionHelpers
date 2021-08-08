@@ -2,11 +2,10 @@
 // Released under the MIT license. See https://github.com/JibbSmart/GamepadMotionHelpers/blob/main/LICENSE for more info
 // Version 6
 
-#pragma once
-
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include <algorithm> // std::min, std::max and std::clamp
+
+#define clamp(value, mi, ma) fminf(ma, fmaxf(mi, value))
 
 // You don't need to look at these. These will just be used internally by the GamepadMotion class declared below.
 // You can ignore anything in namespace GamepadMotionHelpers.
@@ -229,16 +228,16 @@ public:
 		float accelX, float accelY, float accelZ, float deltaTime);
 
 	// reading the current state
-	void GetCalibratedGyro(float& x, float& y, float& z);
-	void GetGravity(float& x, float& y, float& z);
-	void GetProcessedAcceleration(float& x, float& y, float& z);
-	void GetOrientation(float& w, float& x, float& y, float& z);
+	void GetCalibratedGyro(float* x, float* y, float* z);
+	void GetGravity(float* x, float* y, float* z);
+	void GetProcessedAcceleration(float* x, float* y, float* z);
+	void GetOrientation(float* w, float* x, float* y, float* z);
 
 	// gyro calibration functions
 	void StartContinuousCalibration();
 	void PauseContinuousCalibration();
 	void ResetContinuousCalibration();
-	void GetCalibrationOffset(float& xOffset, float& yOffset, float& zOffset);
+	void GetCalibrationOffset(float* xOffset, float* yOffset, float* zOffset);
 	void SetCalibrationOffset(float xOffset, float yOffset, float zOffset, int weight);
 
 	GamepadMotionHelpers::CalibrationMode GetCalibrationMode();
@@ -258,7 +257,7 @@ private:
 
 	bool IsCalibrating;
 	void PushSensorSamples(float gyroX, float gyroY, float gyroZ, float accelMagnitude);
-	void GetCalibratedSensor(float& gyroOffsetX, float& gyroOffsetY, float& gyroOffsetZ, float& accelMagnitude);
+	void GetCalibratedSensor(float* gyroOffsetX, float* gyroOffsetY, float* gyroOffsetZ, float* accelMagnitude);
 };
 
 ///////////// Everything below here are just implementation details /////////////
@@ -581,7 +580,7 @@ namespace GamepadMotionHelpers
 			//	absoluteAccel.x, absoluteAccel.y, absoluteAccel.z);
 			const float smoothFactor = ShortSteadinessHalfTime <= 0.f ? 0.f : exp2f(-deltaTime / ShortSteadinessHalfTime);
 			Shakiness *= smoothFactor;
-			Shakiness = std::max(Shakiness, (accel - SmoothAccel).Length());
+			Shakiness = fmaxf(Shakiness, (accel - SmoothAccel).Length());
 			SmoothAccel = accel.Lerp(SmoothAccel, smoothFactor);
 
 			//printf("Shakiness: %.4f\n", Shakiness);
@@ -595,20 +594,20 @@ namespace GamepadMotionHelpers
 			float gravCorrectionSpeed;
 			if (gravityCorrectionShakinessMinThreshold < gravityCorrectionShakinessMaxThreshold)
 			{
-				gravCorrectionSpeed = gravityCorrectionStillSpeed + (gravityCorrectionShakySpeed - gravityCorrectionStillSpeed) * std::clamp((Shakiness - gravityCorrectionShakinessMinThreshold) / (gravityCorrectionShakinessMaxThreshold - gravityCorrectionShakinessMinThreshold), 0.f, 1.f);
+				gravCorrectionSpeed = gravityCorrectionStillSpeed + (gravityCorrectionShakySpeed - gravityCorrectionStillSpeed) * clamp((Shakiness - gravityCorrectionShakinessMinThreshold) / (gravityCorrectionShakinessMaxThreshold - gravityCorrectionShakinessMinThreshold), 0.f, 1.f);
 			}
 			else
 			{
 				gravCorrectionSpeed = Shakiness < gravityCorrectionShakinessMaxThreshold ? gravityCorrectionStillSpeed : gravityCorrectionShakySpeed;
 			}
 			// we also limit it to be no faster than a given proportion of the gyro rate, or the minimum gravity correction speed
-			const float gyroGravCorrectionLimit = std::max(angleSpeed * gravityCorrectionGyroFactor, gravityCorrectionMinimumSpeed);
+			const float gyroGravCorrectionLimit = fmaxf(angleSpeed * gravityCorrectionGyroFactor, gravityCorrectionMinimumSpeed);
 			if (gravCorrectionSpeed > gyroGravCorrectionLimit)
 			{
 				float closeEnoughFactor;
 				if (gravityCorrectionGyroMinThreshold < gravityCorrectionGyroMaxThreshold)
 				{
-					closeEnoughFactor = std::clamp((gravToAccel.Length() - gravityCorrectionGyroMinThreshold) / (gravityCorrectionGyroMaxThreshold - gravityCorrectionGyroMinThreshold), 0.f, 1.f);
+					closeEnoughFactor = clamp((gravToAccel.Length() - gravityCorrectionGyroMinThreshold) / (gravityCorrectionGyroMaxThreshold - gravityCorrectionGyroMinThreshold), 0.f, 1.f);
 				}
 				else
 				{
@@ -627,7 +626,7 @@ namespace GamepadMotionHelpers
 			}
 
 			const Vec gravityDirection = Grav.Normalized() * Quaternion.Inverse(); // absolute gravity direction
-			const float errorAngle = acosf(std::clamp(Vec(0.0f, -1.0f, 0.0f).Dot(gravityDirection), -1.f, 1.f));
+			const float errorAngle = acosf(clamp(Vec(0.0f, -1.0f, 0.0f).Dot(gravityDirection), -1.f, 1.f));
 			const Vec flattened = Vec(0.0f, -1.0f, 0.0f).Cross(gravityDirection);
 			Quat correctionQuat = AngleAxis(errorAngle, flattened.x, flattened.y, flattened.z);
 			Quaternion = correctionQuat * Quaternion;
@@ -763,7 +762,7 @@ namespace GamepadMotionHelpers
 		}
 		else
 		{
-			RecalibrateThreshold = std::min(RecalibrateThreshold + stillnessErrorClimbRate * deltaTime, maxStillnessError);
+			RecalibrateThreshold = fminf(RecalibrateThreshold + stillnessErrorClimbRate * deltaTime, maxStillnessError);
 			return false;
 		}
 
@@ -782,12 +781,12 @@ namespace GamepadMotionHelpers
 					printf("Still!\n");
 				}/**/
 
-				TimeSteadyStillness = std::min(TimeSteadyStillness + deltaTime, stillnessCalibrationEaseInTime);
+				TimeSteadyStillness = fminf(TimeSteadyStillness + deltaTime, stillnessCalibrationEaseInTime);
 				const float calibrationEaseIn = stillnessCalibrationEaseInTime <= 0.f ? 1.f : TimeSteadyStillness / stillnessCalibrationEaseInTime;
 
 				const Vec calibratedGyro = MinMaxWindow.GetMidGyro();
 
-				const Vec oldGyroBias = Vec(CalibrationData->X, CalibrationData->Y, CalibrationData->Z) / std::max((float)CalibrationData->NumSamples, 1.f);
+				const Vec oldGyroBias = Vec(CalibrationData->X, CalibrationData->Y, CalibrationData->Z) / fmaxf((float)CalibrationData->NumSamples, 1.f);
 				const float stillnessLerpFactor = stillnessCalibrationHalfTime <= 0.f ? 0.f : exp2f(-calibrationEaseIn * deltaTime / stillnessCalibrationHalfTime);
 				Vec newGyroBias = calibratedGyro.Lerp(oldGyroBias, stillnessLerpFactor);
 
@@ -799,7 +798,7 @@ namespace GamepadMotionHelpers
 					const float crossLength = angularVelocity.Length();
 					if (crossLength > 0.f)
 					{
-						const float thisDotPrev = std::clamp(thisNormal.Dot(previousNormal), -1.f, 1.f);
+						const float thisDotPrev = clamp(thisNormal.Dot(previousNormal), -1.f, 1.f);
 						const float angleChange = acosf(thisDotPrev) * 180.0f / (float)M_PI;
 						const float anglePerSecond = angleChange / MinMaxWindow.TimeSampled;
 						angularVelocity *= anglePerSecond / crossLength;
@@ -832,7 +831,7 @@ namespace GamepadMotionHelpers
 			}
 			else
 			{
-				RecalibrateThreshold = std::min(RecalibrateThreshold + stillnessErrorClimbRate * deltaTime, maxStillnessError);
+				RecalibrateThreshold = fminf(RecalibrateThreshold + stillnessErrorClimbRate * deltaTime, maxStillnessError);
 			}
 		}
 		else if (TimeSteadyStillness > 0.f)
@@ -846,7 +845,7 @@ namespace GamepadMotionHelpers
 		}
 		else
 		{
-			RecalibrateThreshold = std::min(RecalibrateThreshold + stillnessErrorClimbRate * deltaTime, maxStillnessError);
+			RecalibrateThreshold = fminf(RecalibrateThreshold + stillnessErrorClimbRate * deltaTime, maxStillnessError);
 			MinMaxWindow.Reset(0.f);
 		}
 
@@ -925,7 +924,7 @@ namespace GamepadMotionHelpers
 		const float crossLength = angularVelocity.Length();
 		if (crossLength > 0.f)
 		{
-			const float thisDotPrev = std::clamp(thisNormal.Dot(previousNormal), -1.f, 1.f);
+			const float thisDotPrev = clamp(thisNormal.Dot(previousNormal), -1.f, 1.f);
 			const float angleChange = acosf(thisDotPrev) * 180.0f / (float)M_PI;
 			const float anglePerSecond = angleChange / deltaTime;
 			angularVelocity *= anglePerSecond / crossLength;
@@ -949,9 +948,9 @@ namespace GamepadMotionHelpers
 				printf("Steady!\n");
 			}/**/
 
-			TimeSteadySensorFusion = std::min(TimeSteadySensorFusion + deltaTime, sensorFusionCalibrationEaseInTime);
+			TimeSteadySensorFusion = fminf(TimeSteadySensorFusion + deltaTime, sensorFusionCalibrationEaseInTime);
 			const float calibrationEaseIn = sensorFusionCalibrationEaseInTime <= 0.f ? 1.f : TimeSteadySensorFusion / sensorFusionCalibrationEaseInTime;
-			const Vec oldGyroBias = Vec(CalibrationData->X, CalibrationData->Y, CalibrationData->Z) / std::max((float)CalibrationData->NumSamples, 1.f);
+			const Vec oldGyroBias = Vec(CalibrationData->X, CalibrationData->Y, CalibrationData->Z) / fmaxf((float)CalibrationData->NumSamples, 1.f);
 			// recalibrate over time proportional to the difference between the calculated bias and the current assumed bias
 			const float sensorFusionLerpFactor = sensorFusionCalibrationHalfTime <= 0.f ? 0.f : exp2f(-calibrationEaseIn * deltaTime / sensorFusionCalibrationHalfTime);
 			Vec newGyroBias = (SmoothedAngularVelocityGyro - SmoothedAngularVelocityAccel).Lerp(oldGyroBias, sensorFusionLerpFactor);
@@ -1073,7 +1072,7 @@ void GamepadMotion::ProcessMotion(float gyroX, float gyroY, float gyroZ,
 	}
 
 	float gyroOffsetX, gyroOffsetY, gyroOffsetZ;
-	GetCalibratedSensor(gyroOffsetX, gyroOffsetY, gyroOffsetZ, accelMagnitude);
+	GetCalibratedSensor(&gyroOffsetX, &gyroOffsetY, &gyroOffsetZ, &accelMagnitude);
 
 	gyroX -= gyroOffsetX;
 	gyroY -= gyroOffsetY;
@@ -1090,33 +1089,33 @@ void GamepadMotion::ProcessMotion(float gyroX, float gyroY, float gyroZ,
 }
 
 // reading the current state
-void GamepadMotion::GetCalibratedGyro(float& x, float& y, float& z)
+void GamepadMotion::GetCalibratedGyro(float* x, float* y, float* z)
 {
-	x = Gyro.x;
-	y = Gyro.y;
-	z = Gyro.z;
+	*x = Gyro.x;
+	*y = Gyro.y;
+	*z = Gyro.z;
 }
 
-void GamepadMotion::GetGravity(float& x, float& y, float& z)
+void GamepadMotion::GetGravity(float* x, float* y, float* z)
 {
-	x = Motion.Grav.x;
-	y = Motion.Grav.y;
-	z = Motion.Grav.z;
+	*x = Motion.Grav.x;
+	*y = Motion.Grav.y;
+	*z = Motion.Grav.z;
 }
 
-void GamepadMotion::GetProcessedAcceleration(float& x, float& y, float& z)
+void GamepadMotion::GetProcessedAcceleration(float* x, float* y, float* z)
 {
-	x = Motion.Accel.x;
-	y = Motion.Accel.y;
-	z = Motion.Accel.z;
+	*x = Motion.Accel.x;
+	*y = Motion.Accel.y;
+	*z = Motion.Accel.z;
 }
 
-void GamepadMotion::GetOrientation(float& w, float& x, float& y, float& z)
+void GamepadMotion::GetOrientation(float* w, float* x, float* y, float* z)
 {
-	w = Motion.Quaternion.w;
-	x = Motion.Quaternion.x;
-	y = Motion.Quaternion.y;
-	z = Motion.Quaternion.z;
+	*w = Motion.Quaternion.w;
+	*x = Motion.Quaternion.x;
+	*y = Motion.Quaternion.y;
+	*z = Motion.Quaternion.z;
 }
 
 // gyro calibration functions
@@ -1135,10 +1134,10 @@ void GamepadMotion::ResetContinuousCalibration()
 	GyroCalibration = {};
 }
 
-void GamepadMotion::GetCalibrationOffset(float& xOffset, float& yOffset, float& zOffset)
+void GamepadMotion::GetCalibrationOffset(float* xOffset, float* yOffset, float* zOffset)
 {
 	float accelMagnitude;
-	GetCalibratedSensor(xOffset, yOffset, zOffset, accelMagnitude);
+	GetCalibratedSensor(xOffset, yOffset, zOffset, &accelMagnitude);
 }
 
 void GamepadMotion::SetCalibrationOffset(float xOffset, float yOffset, float zOffset, int weight)
@@ -1185,20 +1184,20 @@ void GamepadMotion::PushSensorSamples(float gyroX, float gyroY, float gyroZ, flo
 	GyroCalibration.AccelMagnitude += accelMagnitude;
 }
 
-void GamepadMotion::GetCalibratedSensor(float& gyroOffsetX, float& gyroOffsetY, float& gyroOffsetZ, float& accelMagnitude)
+void GamepadMotion::GetCalibratedSensor(float* gyroOffsetX, float* gyroOffsetY, float* gyroOffsetZ, float* accelMagnitude)
 {
 	if (GyroCalibration.NumSamples <= 0)
 	{
-		gyroOffsetX = 0.f;
-		gyroOffsetY = 0.f;
-		gyroOffsetZ = 0.f;
-		accelMagnitude = 1.f;
+		*gyroOffsetX = 0.f;
+		*gyroOffsetY = 0.f;
+		*gyroOffsetZ = 0.f;
+		*accelMagnitude = 1.f;
 		return;
 	}
 
 	const float inverseSamples = 1.f / GyroCalibration.NumSamples;
-	gyroOffsetX = GyroCalibration.X * inverseSamples;
-	gyroOffsetY = GyroCalibration.Y * inverseSamples;
-	gyroOffsetZ = GyroCalibration.Z * inverseSamples;
-	accelMagnitude = GyroCalibration.AccelMagnitude * inverseSamples;
+	*gyroOffsetX = GyroCalibration.X * inverseSamples;
+	*gyroOffsetY = GyroCalibration.Y * inverseSamples;
+	*gyroOffsetZ = GyroCalibration.Z * inverseSamples;
+	*accelMagnitude = GyroCalibration.AccelMagnitude * inverseSamples;
 }
